@@ -5,6 +5,7 @@ import { SignupInputDTO, SignupOutputDTO } from "../dtos/signup.dto"
 import { BadRequestError } from "../errors/BadRequestError"
 import { NotFoundError } from "../errors/NotFoundError"
 import { TokenPayload, USER_ROLES, User } from "../models/User"
+import { HashManager } from "../services/HashManager"
 import { IdGenerator } from "../services/IdGenerator"
 import { TokenManager } from "../services/TokenManager"
 
@@ -12,7 +13,8 @@ export class UserBusiness {
   constructor(
     private userDatabase: UserDatabase,
     private idGenerator: IdGenerator,
-    private tokenManager: TokenManager
+    private tokenManager: TokenManager,
+    private hashManager: HashManager
   ) { }
 
   public getUsers = async (
@@ -63,11 +65,13 @@ export class UserBusiness {
       throw new BadRequestError("'id' já existe")
     }
 
+    const hashedPassword = await this.hashManager.hash(password)
+
     const newUser = new User(
       id,
       name,
       email,
-      password,
+      hashedPassword,
       USER_ROLES.NORMAL, // só é possível criar users com contas normais
       new Date().toISOString()
     )
@@ -102,7 +106,18 @@ export class UserBusiness {
       throw new NotFoundError("'email' não encontrado")
     }
 
-    if (password !== userDB.password) {
+    // if (password !== userDB.password) {
+    //   throw new BadRequestError("'email' ou 'password' incorretos")
+    // }
+
+    // o password hasheado está no banco de dados
+		const hashedPassword = userDB.password
+
+		// o serviço hashManager analisa o password do body (plaintext) e o hash
+		const isPasswordCorrect = await this.hashManager.compare(password, hashedPassword)
+
+		// validamos o resultado
+		if (!isPasswordCorrect) {
       throw new BadRequestError("'email' ou 'password' incorretos")
     }
 
